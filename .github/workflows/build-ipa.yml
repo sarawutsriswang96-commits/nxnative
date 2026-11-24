@@ -1,4 +1,4 @@
-name: Build Game IPA & Data (One-Click)
+name: Instant Ubuntu Build (No Queue + Pixeldrain)
 
 on:
   workflow_dispatch:
@@ -14,41 +14,34 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Set up Python & Dependencies
         run: |
-          brew bundle --file=Brewfile
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Download Files
+      - name: Download Game & Keys
         run: |
-          mkdir -p input work out
+          mkdir -p input work out_data
           .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp || curl -fL "${{ inputs.game_url }}" -o input/game.nsp
           .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys || curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
           echo "DM_PROF_TEX_BC_CPU=1" > work/env.txt
 
-      - name: Build IPA & Separate Data
+      - name: Extract Game Data & Prepare A13 Package
         run: |
-          .venv/bin/python scripts/build_ipa_from_nsp.py input \
-            -k input/prod.keys \
-            --work-dir work \
-            --romfs separate \
-            --env-file work/env.txt \
-            --allow-other-metal \
-            --progress lines
+          mkdir -p ~/.switch work/extracted
+          cp input/prod.keys ~/.switch/prod.keys
+          .venv/bin/nsz -x -o work/extracted input/game.nsp
+          cp work/env.txt work/extracted/
 
-      - name: Upload Fast Links (Pixeldrain)
+      - name: Upload Fast Link (Pixeldrain)
         run: |
-          find . -maxdepth 4 -name "*.ipa" -exec cp {} out/game.ipa \;
-          find work -name "*.img" -exec cp {} out/RomFS.img \;
-          echo "=== ลิงก์โหลดตัวแอป .IPA (เติม https://pixeldrain.com ด้านหน้า id) ==="
-          curl -T out/game.ipa https://pixeldrain.com
-          echo ""
-          echo "=== ลิงก์โหลดไฟล์ Data เกม (เติม https://pixeldrain.com ด้านหน้า id) ==="
-          curl -T out/RomFS.img https://pixeldrain.com
+          cp -r work/extracted/* out_data/
+          zip -r -0 Game-Data-A13-Ready.zip out_data/
+          echo "=== ลิงก์โหลดไฟล์ (เติม https://pixeldrain.com ด้านหน้า id) ==="
+          curl -T Game-Data-A13-Ready.zip https://pixeldrain.com
           echo ""
