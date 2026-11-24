@@ -1,18 +1,18 @@
-name: Fast Convert Game Data (Ubuntu - Instant Start)
+name: Fast Convert Game Data (Google Drive Ready)
 
 on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'Direct Link ของไฟล์เกม (.nsp, .xci, .nsz)'
+        description: 'ลิงก์ Google Drive (ตั้งค่าทุกคนที่มีลิงก์) หรือ Direct Link ของไฟล์เกม'
         required: true
         type: string
       keys_url:
-        description: 'Direct Link ของไฟล์ prod.keys'
+        description: 'ลิงก์ของไฟล์ prod.keys'
         required: true
         type: string
       dlc_url:
-        description: 'Direct Link ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
+        description: 'ลิงก์ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
         required: false
         type: string
       a13_older_device:
@@ -31,15 +31,15 @@ jobs:
       - name: Set up Python & Dependencies
         run: |
           python3 -m venv .venv
-          .venv/bin/python -m pip install lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
+          .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
       - name: Download game and keys
         run: |
           mkdir -p input work out_data
-          curl -fL "${{ inputs.game_url }}" -o input/game.nsp
-          curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          .venv/bin/gdown --fuzzy "${{ inputs.game_url }}" -O input/game.nsp || curl -fL "${{ inputs.game_url }}" -o input/game.nsp
+          .venv/bin/gdown --fuzzy "${{ inputs.keys_url }}" -O input/prod.keys || curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
           if [ -n "${{ inputs.dlc_url }}" ]; then
-            curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
+            .venv/bin/gdown --fuzzy "${{ inputs.dlc_url }}" -O input/dlc.nsp || curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
           fi
           ls -lh input/
 
