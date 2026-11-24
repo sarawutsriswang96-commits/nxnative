@@ -1,4 +1,4 @@
-name: Instant Ubuntu Build + Gofile Fast Link
+name: Build Separate IPA & Game Data (A13 + Google Drive)
 
 on:
   workflow_dispatch:
@@ -11,37 +11,78 @@ on:
         description: 'ลิงก์ของไฟล์ prod.keys'
         required: true
         type: string
+      dlc_url:
+        description: 'ลิงก์ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
+        required: false
+        type: string
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Dependencies
+      - name: Set up Python & Homebrew Dependencies
         run: |
+          brew bundle --file=Brewfile
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Download Game & Keys
+      - name: Download Game & Keys from Google Drive
         run: |
-          mkdir -p input work out_data
-          .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp || curl -fL "${{ inputs.game_url }}" -o input/game.nsp
-          .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys || curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          mkdir -p input work out_ipa out_data
+          if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
+            .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
+          else
+            curl -fL "${{ inputs.game_url }}" -o input/game.nsp
+          fi
+          
+          if [[ "${{ inputs.keys_url }}" == *"google.com"* ]]; then
+            .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys
+          else
+            curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          fi
+
+          if [ -n "${{ inputs.dlc_url }}" ]; then
+            if [[ "${{ inputs.dlc_url }}" == *"google.com"* ]]; then
+              .venv/bin/gdown "${{ inputs.dlc_url }}" -O input/dlc.nsp
+            else
+              curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
+            fi
+          fi
+          ls -lh input/
+
+      - name: Configure A13 Older Device Mode
+        run: |
           echo "DM_PROF_TEX_BC_CPU=1" > work/env.txt
 
-      - name: Extract Game Data & Prepare A13 Package
+      - name: Build Unsigned IPA & Separate RomFS
         run: |
-          mkdir -p ~/.switch work/extracted
-          cp input/prod.keys ~/.switch/prod.keys
-          .venv/bin/nsz -x -o work/extracted input/game.nsp
-          cp work/env.txt work/extracted/
+          .venv/bin/python scripts/build_ipa_from_nsp.py input \
+            -k input/prod.keys \
+            --work-dir work \
+            --romfs separate \
+            --env-file work/env.txt \
+            --allow-other-metal \
+            --progress lines
 
-      - name: Upload to Gofile (Full Speed Download)
+      - name: Collect IPA and Separate Game Data
         run: |
-          cp -r work/extracted/* out_data/
-          zip -r -0 Game-Data-A13-Ready.zip out_data/
-          echo "=== ลิงก์ดาวน์โหลดเต็มสปีด (แตะลิงก์ https://gofile.io... ด้านล่างเพื่อเปิดโหลดใน Safari) ==="
-          RESPONSE=$(curl -s -F "file=@Game-Data-A13-Ready.zip" https://gofile.io)
-          echo "$RESPONSE" | grep -oE 'https://gofile.io[a-zA-Z0-9]+' || echo "$RESPONSE"
+          find . -maxdepth 4 -name "*.ipa" -exec cp {} out_ipa/ \;
+          find work -name "*.img" -exec cp {} out_data/ \;
+          ls -lh out_ipa/ out_data/
+
+      - name: Upload 1 - Game App (.ipa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1-Unsigned-IPA
+          path: out_ipa/*.ipa
+          if-no-files-found: error
+
+      - name: Upload 2 - Game Data (RomFS.img)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2-Game-Data-RomFS
+          path: out_data/*.img
+          if-no-files-found: error
