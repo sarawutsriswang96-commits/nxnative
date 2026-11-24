@@ -1,20 +1,19 @@
-name: Build unsigned IPA (A13 + Separate Data)
+name: Fast Convert Game Data (Ubuntu - Instant Start)
 
 on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'Direct Link ของไฟล์เกมหลัก (.nsp, .xci, .nsz)'
+        description: 'Direct Link ของไฟล์เกม (.nsp, .xci, .nsz)'
         required: true
         type: string
       keys_url:
         description: 'Direct Link ของไฟล์ prod.keys'
         required: true
         type: string
-      extra_urls:
-        description: 'Direct Link ของไฟล์ Update / DLC (ถ้ามีหลายไฟล์ให้คั่นด้วยเว้นวรรค)'
+      dlc_url:
+        description: 'Direct Link ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
         required: false
-        default: ''
         type: string
       a13_older_device:
         description: 'เปิดโหมดชิป A13 / A15 ลงไป (iPhone 11 Pro Max)'
@@ -22,89 +21,54 @@ on:
         default: true
         type: boolean
 
-permissions:
-  contents: read
-
 jobs:
   build:
-    runs-on: macos-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Xcode Metal toolchain
-        run: xcodebuild -downloadComponent MetalToolchain || true
-
-      - name: Set up Python & Homebrew Dependencies
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: 1
+      - name: Set up Python & Dependencies
         run: |
-          brew install xcodegen zstd glslang
           python3 -m venv .venv
           .venv/bin/python -m pip install lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
       - name: Download game and keys
-        env:
-          GAME_URL: ${{ inputs.game_url }}
-          KEYS_URL: ${{ inputs.keys_url }}
-          EXTRA_URLS: ${{ inputs.extra_urls }}
         run: |
-          mkdir -p input work out_ipa out_data
-          ext="nsp"
-          case "$GAME_URL" in
-            *.xci*) ext="xci" ;;
-            *.nsz*) ext="nsz" ;;
-          esac
-          curl -fL --retry 3 "$GAME_URL" -o "input/game.${ext}"
-          curl -fL --retry 3 "$KEYS_URL" -o input/prod.keys
-          i=1
-          for url in $EXTRA_URLS; do
-            e_ext="nsp"
-            case "$url" in
-              *.xci*) e_ext="xci" ;;
-              *.nsz*) e_ext="nsz" ;;
-            esac
-            curl -fL --retry 3 "$url" -o "input/extra_${i}.${e_ext}"
-            i=$((i + 1))
-          done
+          mkdir -p input work out_data
+          curl -fL "${{ inputs.game_url }}" -o input/game.nsp
+          curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          if [ -n "${{ inputs.dlc_url }}" ]; then
+            curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
+          fi
           ls -lh input/
 
       - name: Configure A13 Older Device Mode
-        env:
-          IS_A13: ${{ inputs.a13_older_device }}
         run: |
           touch work/env.txt
-          if [ "$IS_A13" = "true" ]; then
+          if [ "${{ inputs.a13_older_device }}" == "true" ]; then
             echo "DM_PROF_TEX_BC_CPU=1" >> work/env.txt
           fi
 
-      - name: Build unsigned IPA
+      - name: Convert Game Data (Separate RomFS + A13 Patch)
         run: |
           .venv/bin/python scripts/build_ipa_from_nsp.py input \
             -k input/prod.keys \
-            -o out_ipa/game.ipa \
             --work-dir work \
             --romfs separate \
             --env-file work/env.txt \
-            --allow-other-metal \
+            --skip-xcode \
             --progress lines
 
-      - name: Collect Separate Game Data
+      - name: Collect Game Data
         run: |
           find work -name "*.img" -exec cp {} out_data/ \;
-          ls -lh out_ipa/ out_data/
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: 1-Unsigned-IPA
-          path: out_ipa/*.ipa
-          if-no-files-found: error
+          cp work/env.txt out_data/ 2>/dev/null || true
+          ls -lh out_data/
 
       - name: Upload Separate Game Data
         uses: actions/upload-artifact@v4
         with:
-          name: 2-Game-Data-RomFS
-          path: out_data/*.img
+          name: Game-Data-A13-Ready
+          path: out_data/
           if-no-files-found: error
