@@ -1,4 +1,4 @@
-name: Instant Ubuntu Build (No Queue + Linux Extractor)
+name: Instant Ubuntu Build (No Queue + Built-in Extractor)
 
 on:
   workflow_dispatch:
@@ -28,15 +28,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Build Linux Extractor (nstool)
+      - name: Set up Python & Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y build-essential git cmake
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
-          git clone --depth 1 https://github.com /tmp/nstool
-          make -C /tmp/nstool -j$(nproc)
-          sudo cp /tmp/nstool/bin/nstool /usr/local/bin/
-          nstool --version
 
       - name: Download Game & Keys from Google Drive
         run: |
@@ -69,23 +64,18 @@ jobs:
             echo "DM_PROF_TEX_BC_CPU=1" >> work/env.txt
           fi
 
-      - name: Extract & Convert Game Data (A13 Ready)
+      - name: Extract Game Data & Prepare A13 Package
         run: |
-          mkdir -p work/extracted work/romfs_dir
-          nstool -k input/prod.keys -x work/extracted input/game.nsp
-          find work/extracted -type f -name "*.nca" -exec ls -lh {} \;
-          MAIN_NCA=$(find work/extracted -type f -name "*.nca" -printf "%s %p\n" | sort -rn | head -n 1 | cut -d' ' -f2-)
-          echo "Extracting largest NCA: $MAIN_NCA"
-          nstool -k input/prod.keys --romfsdir work/romfs_dir --exefsdir work/exefs_dir "$MAIN_NCA"
-          cp work/env.txt work/romfs_dir/ 2>/dev/null || true
-          ls -lh work/exefs_dir/ work/romfs_dir/
+          mkdir -p ~/.switch work/extracted
+          cp input/prod.keys ~/.switch/prod.keys
+          .venv/bin/nsz -x -o work/extracted input/game.nsp
+          cp work/env.txt work/extracted/
+          ls -lh work/extracted/
 
       - name: Package Separate Game Data
         run: |
           mkdir -p out_data
-          cp -r work/exefs_dir out_data/
-          cp work/env.txt out_data/
-          tar -cf out_data/RomFS.img -C work/romfs_dir .
+          cp -r work/extracted/* out_data/
           ls -lh out_data/
 
       - name: Upload Separate Game Data
