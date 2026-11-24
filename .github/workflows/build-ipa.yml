@@ -1,4 +1,4 @@
-name: Instant Ubuntu Build (No Queue + Pixeldrain)
+name: Instant Ubuntu Build + Gofile Fast Link
 
 on:
   workflow_dispatch:
@@ -38,10 +38,10 @@ jobs:
           .venv/bin/nsz -x -o work/extracted input/game.nsp
           cp work/env.txt work/extracted/
 
-      - name: Upload Fast Link (Pixeldrain)
+      - name: Upload to Gofile (Full Speed Download)
         run: |
           cp -r work/extracted/* out_data/
           zip -r -0 Game-Data-A13-Ready.zip out_data/
-          echo "=== ลิงก์โหลดไฟล์ (เติม https://pixeldrain.com ด้านหน้า id) ==="
-          curl -T Game-Data-A13-Ready.zip https://pixeldrain.com
-          echo ""
+          SERVER=$(curl -s https://gofile.io | grep -oE 'store[0-9]+' | head -n 1)
+          echo "=== ลิงก์ดาวน์โหลดเต็มสปีด (ก๊อปปี้ลิงก์ https://gofile.io... ด้านล่างไปเปิดใน Safari) ==="
+          curl -s -F "file=@Game-Data-A13-Ready.zip" "https://${SERVER}.gofile.io/contents/uploadfile" | grep -oE 'https://gofile.io[a-zA-Z0-9]+'
