@@ -37,20 +37,20 @@ jobs:
         run: |
           mkdir -p input work out_data
           if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown --fuzzy "${{ inputs.game_url }}" -O input/game.nsp
+            .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
           else
             curl -fL "${{ inputs.game_url }}" -o input/game.nsp
           fi
           
           if [[ "${{ inputs.keys_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown --fuzzy "${{ inputs.keys_url }}" -O input/prod.keys
+            .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys
           else
             curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
           fi
 
           if [ -n "${{ inputs.dlc_url }}" ]; then
             if [[ "${{ inputs.dlc_url }}" == *"google.com"* ]]; then
-              .venv/bin/gdown --fuzzy "${{ inputs.dlc_url }}" -O input/dlc.nsp
+              .venv/bin/gdown "${{ inputs.dlc_url }}" -O input/dlc.nsp
             else
               curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
             fi
