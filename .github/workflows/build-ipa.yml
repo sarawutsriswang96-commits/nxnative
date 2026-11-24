@@ -1,4 +1,4 @@
-name: Build Separate IPA & Game Data (Google Drive + A13)
+name: Build Separate IPA & Game Data (macos-14 Fast Queue)
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
