@@ -42,6 +42,6 @@ jobs:
         run: |
           cp -r work/extracted/* out_data/
           zip -r -0 Game-Data-A13-Ready.zip out_data/
-          SERVER=$(curl -s https://gofile.io | grep -oE 'store[0-9]+' | head -n 1)
-          echo "=== ลิงก์ดาวน์โหลดเต็มสปีด (ก๊อปปี้ลิงก์ https://gofile.io... ด้านล่างไปเปิดใน Safari) ==="
-          curl -s -F "file=@Game-Data-A13-Ready.zip" "https://${SERVER}.gofile.io/contents/uploadfile" | grep -oE 'https://gofile.io[a-zA-Z0-9]+'
+          echo "=== ลิงก์ดาวน์โหลดเต็มสปีด (แตะลิงก์ https://gofile.io... ด้านล่างเพื่อเปิดโหลดใน Safari) ==="
+          RESPONSE=$(curl -s -F "file=@Game-Data-A13-Ready.zip" https://gofile.io)
+          echo "$RESPONSE" | grep -oE 'https://gofile.io[a-zA-Z0-9]+' || echo "$RESPONSE"
