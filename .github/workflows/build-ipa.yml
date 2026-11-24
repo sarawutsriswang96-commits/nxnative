@@ -1,4 +1,4 @@
-name: Build Separate IPA & Game Data (Google Drive + A13)
+name: Instant Ubuntu Build (No Queue + Linux Extractor)
 
 on:
   workflow_dispatch:
@@ -23,20 +23,24 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Homebrew Dependencies
+      - name: Set up Python & Build Linux Extractor (nstool)
         run: |
-          brew bundle --file=Brewfile
+          sudo apt-get update && sudo apt-get install -y build-essential git cmake
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
+          git clone --depth 1 https://github.com /tmp/nstool
+          make -C /tmp/nstool -j$(nproc)
+          sudo cp /tmp/nstool/bin/nstool /usr/local/bin/
+          nstool --version
 
       - name: Download Game & Keys from Google Drive
         run: |
-          mkdir -p input work out_ipa out_data
+          mkdir -p input work out_data
           if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
             .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
           else
@@ -65,32 +69,28 @@ jobs:
             echo "DM_PROF_TEX_BC_CPU=1" >> work/env.txt
           fi
 
-      - name: Build Unsigned IPA & Separate RomFS
+      - name: Extract & Convert Game Data (A13 Ready)
         run: |
-          .venv/bin/python scripts/build_ipa_from_nsp.py input \
-            -k input/prod.keys \
-            --work-dir work \
-            --romfs separate \
-            --env-file work/env.txt \
-            --allow-other-metal \
-            --progress lines
+          mkdir -p work/extracted work/romfs_dir
+          nstool -k input/prod.keys -x work/extracted input/game.nsp
+          find work/extracted -type f -name "*.nca" -exec ls -lh {} \;
+          MAIN_NCA=$(find work/extracted -type f -name "*.nca" -printf "%s %p\n" | sort -rn | head -n 1 | cut -d' ' -f2-)
+          echo "Extracting largest NCA: $MAIN_NCA"
+          nstool -k input/prod.keys --romfsdir work/romfs_dir --exefsdir work/exefs_dir "$MAIN_NCA"
+          cp work/env.txt work/romfs_dir/ 2>/dev/null || true
+          ls -lh work/exefs_dir/ work/romfs_dir/
 
-      - name: Collect IPA and Separate Game Data
+      - name: Package Separate Game Data
         run: |
-          find . -maxdepth 4 -name "*.ipa" -exec cp {} out_ipa/ \;
-          find work -name "*.img" -exec cp {} out_data/ \;
-          ls -lh out_ipa/ out_data/
+          mkdir -p out_data
+          cp -r work/exefs_dir out_data/
+          cp work/env.txt out_data/
+          tar -cf out_data/RomFS.img -C work/romfs_dir .
+          ls -lh out_data/
 
-      - name: Upload 1 - Game App (.ipa)
+      - name: Upload Separate Game Data
         uses: actions/upload-artifact@v4
         with:
-          name: 1-Unsigned-IPA
-          path: out_ipa/*.ipa
-          if-no-files-found: error
-
-      - name: Upload 2 - Game Data (RomFS.img)
-        uses: actions/upload-artifact@v4
-        with:
-          name: 2-Game-Data-RomFS
-          path: out_data/*.img
+          name: Game-Data-A13-Ready
+          path: out_data/
           if-no-files-found: error
