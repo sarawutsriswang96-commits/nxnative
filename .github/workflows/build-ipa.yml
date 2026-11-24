@@ -28,10 +28,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Dependencies
+      - name: Set up Python & Compile Linux Tools
         run: |
+          sudo apt-get update && sudo apt-get install -y build-essential cmake clang
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
+          if [ -d "dm/tools/nx_extract" ] || [ -f "dm/tools/nx_extract/Makefile" ] || [ -f "dm/tools/nx_extract/CMakeLists.txt" ]; then
+            echo "Found nx_extract source"
+          fi
+          find dm/tools -maxdepth 3 -ls
+          for dir in dm/tools/*; do
+            if [ -f "$dir/Makefile" ]; then
+              make -C "$dir" || true
+            elif [ -f "$dir/build.sh" ]; then
+              (cd "$dir" && bash build.sh) || true
+            fi
+          done
+          find dm/tools -name "nx_extract" -type f -exec cp {} dm/tools/nx_extract_bin/nx_extract \; 2>/dev/null || true
 
       - name: Download Game & Keys
         run: |
