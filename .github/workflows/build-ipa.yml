@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ Google Drive ของไฟล์เกม (ตั้งค่าทุกคนที่มีลิงก์)'
+        description: 'ลิงก์ Google Drive ของไฟล์เกม .nsp (ต้องเปิดทุกคนที่มีลิงก์)'
         required: true
         type: string
       keys_url:
-        description: 'ลิงก์ Google Drive หรือ Direct Link ของไฟล์ prod.keys'
+        description: 'ลิงก์ของไฟล์ prod.keys'
         required: true
         type: string
       dlc_url:
@@ -31,25 +31,29 @@ jobs:
       - name: Set up Python & Dependencies
         run: |
           python3 -m venv .venv
-          .venv/bin/python -m pip install lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
+          .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Download Game & Keys from Google Drive
+      - name: Download Game & Keys
         run: |
           mkdir -p input work out_data
-          download_gdrive() {
-            URL="$1"
-            OUT="$2"
-            ID=$(echo "$URL" | grep -oE '[-\w]{25,}' | head -n 1)
-            if [ -n "$ID" ] && [[ "$URL" == *"google.com"* ]]; then
-              curl -fL "https://google.com{ID}&export=download&confirm=t" -o "$OUT"
-            else
-              curl -fL "$URL" -o "$OUT"
-            fi
-          }
-          download_gdrive "${{ inputs.game_url }}" "input/game.nsp"
-          download_gdrive "${{ inputs.keys_url }}" "input/prod.keys"
+          if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
+            .venv/bin/gdown --fuzzy "${{ inputs.game_url }}" -O input/game.nsp
+          else
+            curl -fL "${{ inputs.game_url }}" -o input/game.nsp
+          fi
+          
+          if [[ "${{ inputs.keys_url }}" == *"google.com"* ]]; then
+            .venv/bin/gdown --fuzzy "${{ inputs.keys_url }}" -O input/prod.keys
+          else
+            curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          fi
+
           if [ -n "${{ inputs.dlc_url }}" ]; then
-            download_gdrive "${{ inputs.dlc_url }}" "input/dlc.nsp"
+            if [[ "${{ inputs.dlc_url }}" == *"google.com"* ]]; then
+              .venv/bin/gdown --fuzzy "${{ inputs.dlc_url }}" -O input/dlc.nsp
+            else
+              curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
+            fi
           fi
           ls -lh input/
 
