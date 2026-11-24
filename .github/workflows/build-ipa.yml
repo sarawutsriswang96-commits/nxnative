@@ -57,11 +57,12 @@ jobs:
             --work-dir work \
             --romfs separate \
             --env-file work/env.txt \
-            --skip-xcode \
+            --prepare-xcode \
             --progress lines
 
       - name: Collect Game Data
         run: |
+          find work -maxdepth 4 -ls
           find work -name "*.img" -exec cp {} out_data/ \;
           cp work/env.txt out_data/ 2>/dev/null || true
           ls -lh out_data/
