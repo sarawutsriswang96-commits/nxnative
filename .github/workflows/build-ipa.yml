@@ -1,25 +1,16 @@
-name: Build Separate IPA & Game Data (Google Drive + A13)
+name: Build Game IPA & Data (One-Click)
 
 on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ Google Drive ของไฟล์เกม .nsp (ต้องเปิดทุกคนที่มีลิงก์)'
+        description: 'ลิงก์ Google Drive ของไฟล์เกม .nsp (เปิดทุกคนที่มีลิงก์)'
         required: true
         type: string
       keys_url:
         description: 'ลิงก์ของไฟล์ prod.keys'
         required: true
         type: string
-      dlc_url:
-        description: 'ลิงก์ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
-        required: false
-        type: string
-      a13_older_device:
-        description: 'เปิดโหมดชิป A13 / A15 ลงไป (iPhone 11 Pro Max)'
-        required: true
-        default: true
-        type: boolean
 
 jobs:
   build:
@@ -28,44 +19,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Homebrew Dependencies
+      - name: Install Dependencies
         run: |
           brew bundle --file=Brewfile
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Download Game & Keys from Google Drive
+      - name: Download Files
         run: |
-          mkdir -p input work out_ipa out_data
-          if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
-          else
-            curl -fL "${{ inputs.game_url }}" -o input/game.nsp
-          fi
-          
-          if [[ "${{ inputs.keys_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys
-          else
-            curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
-          fi
+          mkdir -p input work out
+          .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp || curl -fL "${{ inputs.game_url }}" -o input/game.nsp
+          .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys || curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
+          echo "DM_PROF_TEX_BC_CPU=1" > work/env.txt
 
-          if [ -n "${{ inputs.dlc_url }}" ]; then
-            if [[ "${{ inputs.dlc_url }}" == *"google.com"* ]]; then
-              .venv/bin/gdown "${{ inputs.dlc_url }}" -O input/dlc.nsp
-            else
-              curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
-            fi
-          fi
-          ls -lh input/
-
-      - name: Configure A13 Older Device Mode
-        run: |
-          touch work/env.txt
-          if [ "${{ inputs.a13_older_device }}" == "true" ]; then
-            echo "DM_PROF_TEX_BC_CPU=1" >> work/env.txt
-          fi
-
-      - name: Build Unsigned IPA & Separate RomFS
+      - name: Build IPA & Separate Data
         run: |
           .venv/bin/python scripts/build_ipa_from_nsp.py input \
             -k input/prod.keys \
@@ -75,22 +42,13 @@ jobs:
             --allow-other-metal \
             --progress lines
 
-      - name: Collect IPA and Separate Game Data
+      - name: Upload Fast Links (Pixeldrain)
         run: |
-          find . -maxdepth 4 -name "*.ipa" -exec cp {} out_ipa/ \;
-          find work -name "*.img" -exec cp {} out_data/ \;
-          ls -lh out_ipa/ out_data/
-
-      - name: Upload 1 - Game App (.ipa)
-        uses: actions/upload-artifact@v4
-        with:
-          name: 1-Unsigned-IPA
-          path: out_ipa/*.ipa
-          if-no-files-found: error
-
-      - name: Upload 2 - Game Data (RomFS.img)
-        uses: actions/upload-artifact@v4
-        with:
-          name: 2-Game-Data-RomFS
-          path: out_data/*.img
-          if-no-files-found: error
+          find . -maxdepth 4 -name "*.ipa" -exec cp {} out/game.ipa \;
+          find work -name "*.img" -exec cp {} out/RomFS.img \;
+          echo "=== ลิงก์โหลดตัวแอป .IPA (เติม https://pixeldrain.com ด้านหน้า id) ==="
+          curl -T out/game.ipa https://pixeldrain.com
+          echo ""
+          echo "=== ลิงก์โหลดไฟล์ Data เกม (เติม https://pixeldrain.com ด้านหน้า id) ==="
+          curl -T out/RomFS.img https://pixeldrain.com
+          echo ""
