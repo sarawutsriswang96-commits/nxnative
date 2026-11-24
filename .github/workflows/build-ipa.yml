@@ -1,4 +1,4 @@
-name: Fast Convert Game Data (Google Drive Direct Bypass)
+name: Build Separate IPA & Game Data (Google Drive + A13)
 
 on:
   workflow_dispatch:
@@ -23,32 +23,20 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Compile Linux Tools
+      - name: Set up Python & Homebrew Dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y build-essential cmake clang
+          brew bundle --file=Brewfile
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
-          if [ -d "dm/tools/nx_extract" ] || [ -f "dm/tools/nx_extract/Makefile" ] || [ -f "dm/tools/nx_extract/CMakeLists.txt" ]; then
-            echo "Found nx_extract source"
-          fi
-          find dm/tools -maxdepth 3 -ls
-          for dir in dm/tools/*; do
-            if [ -f "$dir/Makefile" ]; then
-              make -C "$dir" || true
-            elif [ -f "$dir/build.sh" ]; then
-              (cd "$dir" && bash build.sh) || true
-            fi
-          done
-          find dm/tools -name "nx_extract" -type f -exec cp {} dm/tools/nx_extract_bin/nx_extract \; 2>/dev/null || true
 
-      - name: Download Game & Keys
+      - name: Download Game & Keys from Google Drive
         run: |
-          mkdir -p input work out_data
+          mkdir -p input work out_ipa out_data
           if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
             .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
           else
@@ -77,26 +65,32 @@ jobs:
             echo "DM_PROF_TEX_BC_CPU=1" >> work/env.txt
           fi
 
-      - name: Convert Game Data (Separate RomFS + A13 Patch)
+      - name: Build Unsigned IPA & Separate RomFS
         run: |
           .venv/bin/python scripts/build_ipa_from_nsp.py input \
             -k input/prod.keys \
             --work-dir work \
             --romfs separate \
             --env-file work/env.txt \
-            --prepare-xcode \
+            --allow-other-metal \
             --progress lines
 
-      - name: Collect Game Data
+      - name: Collect IPA and Separate Game Data
         run: |
-          find work -maxdepth 4 -ls
+          find . -maxdepth 4 -name "*.ipa" -exec cp {} out_ipa/ \;
           find work -name "*.img" -exec cp {} out_data/ \;
-          cp work/env.txt out_data/ 2>/dev/null || true
-          ls -lh out_data/
+          ls -lh out_ipa/ out_data/
 
-      - name: Upload Separate Game Data
+      - name: Upload 1 - Game App (.ipa)
         uses: actions/upload-artifact@v4
         with:
-          name: Game-Data-A13-Ready
-          path: out_data/
+          name: 1-Unsigned-IPA
+          path: out_ipa/*.ipa
+          if-no-files-found: error
+
+      - name: Upload 2 - Game Data (RomFS.img)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2-Game-Data-RomFS
+          path: out_data/*.img
           if-no-files-found: error
