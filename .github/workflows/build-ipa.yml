@@ -69,17 +69,20 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3 & 4. แก้ build_ipa_from_nsp.py ไม่ให้หยุดทำงานเมื่อ found no shaders และ no iOS shader libraries
-          for path in glob.glob("**/build_ipa_from_nsp.py", recursive=True):
+          # 3. ค้นหาทุกไฟล์ .py ที่เช็ก "found no shaders" หรือ "no iOS shader libraries" แล้วสั่งข้ามพร้อมสร้าง dummy metallib
+          for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
+              changed = False
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "the shader split found no shaders" in line or "no iOS shader libraries in" in line:
+                  if "the shader split found no shaders" in line or "no iOS shader libraries" in line:
                       indent = line[:len(line) - len(line.lstrip())]
+                      new_lines.append(indent + "import glob as _g; [open(_d + \"/default.metallib\", \"wb\").close() for _d in _g.glob(\"work/shader/ios/*\")]\n")
                       new_lines.append(indent + "print(\"Continuing without pre-split UE5 shaders...\")\n")
                       skip_exit = True
+                      changed = True
                   elif skip_exit and ("sys.exit" in line or "raise " in line or "return " in line):
                       skip_exit = False
                       continue
@@ -89,9 +92,10 @@ jobs:
                       if "locate them" in line:
                           continue
                       new_lines.append(line)
-              with open(path, "w") as f:
-                  f.writelines(new_lines)
-              print("Patched build_ipa_from_nsp.py:", path)
+              if changed:
+                  with open(path, "w") as f:
+                      f.writelines(new_lines)
+                  print("Patched shader check in:", path)
           '
 
       - name: Download Game & Keys from Google Drive
