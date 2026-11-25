@@ -36,9 +36,8 @@ jobs:
           for path in glob.glob("**/nvn_mtl.m", recursive=True):
               with open(path, "r") as f:
                   code = f.read()
-              # ปิดบรรทัดที่เรียกใช้ property ของ MTL4FXTemporalScaler ที่เปลี่ยนใน Xcode 26
-              for prop in ["reactiveMaskContentOffsetX", "reactiveMaskContentOffsetY", "outputOffsetX", "outputOffsetY"]:
-                  code = re.sub(r"^.*" + prop + r".*$", r"// patched: \g<0>", code, flags=re.M)
+              # ปิดบรรทัดที่เรียกใช้ property *OffsetX / *OffsetY ของ MTL4FXTemporalScaler ทั้งหมด
+              code = re.sub(r"^.*\bsc\.[a-zA-Z0-9_]*Offset[XY]\s*=.*$", r"// patched: \g<0>", code, flags=re.M)
               with open(path, "w") as f:
                   f.write(code)
               print("Patched:", path)
