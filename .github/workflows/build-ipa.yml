@@ -46,7 +46,7 @@ jobs:
                   f.write(code)
               print("Patched Metal 4:", path)
 
-          # 2. แก้ shader_split.py ให้ข้ามเฉพาะ record ที่ไม่รู้จัก (continue) แทนการหยุดทำงาน
+          # 2. แก้ shader_split.py ให้ข้ามเฉพาะ record ที่ไม่รู้จัก (continue)
           for path in glob.glob("**/shader_split.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -68,6 +68,19 @@ jobs:
               with open(path, "w") as f:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
+
+          # 3. แก้ build_ipa_from_nsp.py ไม่ให้หยุดทำงานเมื่อ found no shaders
+          for path in glob.glob("**/build_ipa_from_nsp.py", recursive=True):
+              with open(path, "r") as f:
+                  bcode = f.read()
+              bcode = re.sub(
+                  r"([ \t]*)(.*the shader split found no shaders.*\n(?:[ \t]*.*(?:sys\.exit|raise|return).*\n)?)",
+                  r"\1print(\"Continuing without pre-split UE5 shaders...\")\n",
+                  bcode
+              )
+              with open(path, "w") as f:
+                  f.write(bcode)
+              print("Patched build_ipa_from_nsp.py:", path)
           '
 
       - name: Download Game & Keys from Google Drive
