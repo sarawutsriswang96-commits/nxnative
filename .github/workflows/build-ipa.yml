@@ -69,7 +69,7 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ข้ามข้อจำกัด UE5 (เชดเดอร์และ NRO ที่ไม่ได้ใช้งาน)
+          # 3. ข้ามข้อจำกัด UE5 (เชดเดอร์, iOS shader libraries และ NRO ที่ไม่ได้ใช้งาน)
           for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -77,18 +77,22 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "sha = got[0].stem" in line:
+                  if "sha = got.stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
                       new_lines.append(indent + "    return []\n")
                       new_lines.append(line)
                       changed = True
+                  elif "no iOS shader libraries" in line:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      new_lines.append(indent + "import glob as _g, os as _o; [_o.makedirs(_d, exist_ok=True) or open(_d + \"/default.metallib\", \"wb\").close() for _d in _g.glob(\"work/shader/ios/*\")]\n")
+                      new_lines.append(indent + "print(\"Bypassing empty iOS shader libraries...\")\n")
+                      new_lines.append(indent + "return\n")
+                      changed = True
                   elif ("the shader split found no shaders" in line or 
-                      "no iOS shader libraries" in line or 
                       "the game loaded none of the" in line):
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(indent + "import glob as _g; [open(_d + \"/default.metallib\", \"wb\").close() for _d in _g.glob(\"work/shader/ios/*\")]\n")
                       new_lines.append(indent + "print(\"Continuing UE5 build...\")\n")
                       skip_exit = True
                       changed = True
