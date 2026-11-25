@@ -34,7 +34,7 @@ jobs:
           python3 -c '
           import glob, re
 
-          # 1. แพตช์ Metal 4 ใน nvn_mtl.m (ผ่านการทดสอบแล้ว 100%)
+          # 1. แพตช์ Metal 4 ใน nvn_mtl.m
           for path in glob.glob("**/nvn_mtl.m", recursive=True):
               with open(path, "r") as f:
                   code = f.read()
@@ -55,8 +55,8 @@ jobs:
               for line in lines:
                   if "recognized Unreal shader record layout" in line:
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(f"{indent}print(\"Warning: skipping unknown shader record\")\n")
-                      new_lines.append(f"{indent}continue\n")
+                      new_lines.append(indent + "print(\"Warning: skipping unknown shader record\")\n")
+                      new_lines.append(indent + "continue\n")
                       skip_next_exit = True
                   elif skip_next_exit and ("sys.exit" in line or "raise " in line):
                       skip_next_exit = False
@@ -72,14 +72,25 @@ jobs:
           # 3. แก้ build_ipa_from_nsp.py ไม่ให้หยุดทำงานเมื่อ found no shaders
           for path in glob.glob("**/build_ipa_from_nsp.py", recursive=True):
               with open(path, "r") as f:
-                  bcode = f.read()
-              bcode = re.sub(
-                  r"([ \t]*)(.*the shader split found no shaders.*\n(?:[ \t]*.*(?:sys\.exit|raise|return).*\n)?)",
-                  r"\1print(\"Continuing without pre-split UE5 shaders...\")\n",
-                  bcode
-              )
+                  lines = f.readlines()
+              new_lines = []
+              skip_exit = False
+              for line in lines:
+                  if "the shader split found no shaders" in line:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      new_lines.append(indent + "print(\"Continuing without pre-split UE5 shaders...\")\n")
+                      skip_exit = True
+                  elif skip_exit and ("sys.exit" in line or "raise " in line or "return " in line):
+                      skip_exit = False
+                      continue
+                  else:
+                      if line.strip() != "" and not line.strip().startswith("locate them"):
+                          skip_exit = False
+                      if "locate them" in line:
+                          continue
+                      new_lines.append(line)
               with open(path, "w") as f:
-                  f.write(bcode)
+                  f.writelines(new_lines)
               print("Patched build_ipa_from_nsp.py:", path)
           '
 
