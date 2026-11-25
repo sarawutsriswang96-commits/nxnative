@@ -121,10 +121,16 @@ jobs:
                   token = acc["data"]["token"]
                   headers = {**base_headers, "Authorization": f"Bearer {token}", "X-Website-Token": "4fd6sg89d7s6"}
                   info = requests.get(f"https://api.gofile.io/contents/{cid}?wt=4fd6sg89d7s6", headers=headers).json()
-                  children = info["data"]["children"]
-                  first_file = next(iter(children.values()))
-                  direct_link = first_file["link"]
-                  print("Downloading from Gofile:", first_file["name"])
+                  data = info.get("data", {})
+                  if "link" in data:
+                      direct_link = data["link"]
+                      fname = data.get("name", "game.nsp")
+                  else:
+                      items = data.get("children") or data.get("contents") or {}
+                      first_file = next(iter(items.values()))
+                      direct_link = first_file["link"]
+                      fname = first_file.get("name", "game.nsp")
+                  print("Downloading from Gofile:", fname)
                   subprocess.run(["curl", "-fL", "-A", base_headers["User-Agent"], "-H", f"Cookie: accountToken={token}", direct_link, "-o", out_path], check=True)
               elif "google.com" in url:
                   subprocess.run([".venv/bin/gdown", url, "-O", out_path], check=True)
