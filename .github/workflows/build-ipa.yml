@@ -23,9 +23,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Dependencies
+      - name: Set up Python & Homebrew Dependencies
         run: |
-          if [ -f "Brewfile" ]; then brew bundle --file=Brewfile; fi
+          brew install xcodegen glslang
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
