@@ -77,7 +77,14 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if ("the shader split found no shaders" in line or 
+                  if "sha = got[0].stem" in line:
+                      indent = line[:len(line) - len(line.lstrip())]
+                      new_lines.append(indent + "if not got:\n")
+                      new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
+                      new_lines.append(indent + "    return []\n")
+                      new_lines.append(line)
+                      changed = True
+                  elif ("the shader split found no shaders" in line or 
                       "no iOS shader libraries" in line or 
                       "the game loaded none of the" in line):
                       indent = line[:len(line) - len(line.lstrip())]
