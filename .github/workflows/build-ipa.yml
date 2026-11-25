@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ Google Drive ของไฟล์เกม .nsp (เปิดทุกคนที่มีลิงก์)'
+        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Google Drive, Gofile, Pixeldrain)'
         required: true
         type: string
       keys_url:
@@ -27,7 +27,7 @@ jobs:
         run: |
           brew install xcodegen glslang
           python3 -m venv .venv
-          .venv/bin/python -m pip install gdown lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
+          .venv/bin/python -m pip install gdown requests lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
       - name: Patch Metal 4 & UE5 Shader Compatibility
         run: |
@@ -98,28 +98,39 @@ jobs:
                   print("Patched shader check in:", path)
           '
 
-      - name: Download Game & Keys from Google Drive
+      - name: Download Game & Keys (Supports Gofile, Google Drive, Direct URL)
         run: |
           mkdir -p input work out_ipa out_data
-          if [[ "${{ inputs.game_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown "${{ inputs.game_url }}" -O input/game.nsp
-          else
-            curl -fL "${{ inputs.game_url }}" -o input/game.nsp
-          fi
-          
-          if [[ "${{ inputs.keys_url }}" == *"google.com"* ]]; then
-            .venv/bin/gdown "${{ inputs.keys_url }}" -O input/prod.keys
-          else
-            curl -fL "${{ inputs.keys_url }}" -o input/prod.keys
-          fi
+          .venv/bin/python -c '
+          import os, re, subprocess, requests
 
-          if [ -n "${{ inputs.dlc_url }}" ]; then
-            if [[ "${{ inputs.dlc_url }}" == *"google.com"* ]]; then
-              .venv/bin/gdown "${{ inputs.dlc_url }}" -O input/dlc.nsp
-            else
-              curl -fL "${{ inputs.dlc_url }}" -o input/dlc.nsp
-            fi
-          fi
+          def download(url, out_path):
+              url = url.strip()
+              if not url:
+                  return
+              if "gofile.io/d/" in url:
+                  cid = url.split("gofile.io/d/")[1].split("/")[0].split("?")[0]
+                  print("Resolving Gofile ID:", cid)
+                  acc = requests.post("https://gofile.io").json()
+                  token = acc["data"]["token"]
+                  headers = {"Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0"}
+                  info = requests.get(f"https://gofile.io{cid}?wt=4fd6sg89d7s6", headers=headers).json()
+                  children = info["data"]["children"]
+                  first_file = next(iter(children.values()))
+                  direct_link = first_file["link"]
+                  print("Downloading from Gofile direct link:", first_file["name"])
+                  subprocess.run(["curl", "-fL", "-H", f"Cookie: accountToken={token}", direct_link, "-o", out_path], check=True)
+              elif "google.com" in url:
+                  subprocess.run([".venv/bin/gdown", url, "-O", out_path], check=True)
+              else:
+                  if "://pixeldrain.com" in url:
+                      url = url.replace("://pixeldrain.com", "://pixeldrain.com")
+                  subprocess.run(["curl", "-fL", url, "-o", out_path], check=True)
+
+          download("${{ inputs.game_url }}", "input/game.nsp")
+          download("${{ inputs.keys_url }}", "input/prod.keys")
+          download("${{ inputs.dlc_url }}", "input/dlc.nsp")
+          '
           ls -lh input/
 
       - name: Configure A13 Older Device Mode
