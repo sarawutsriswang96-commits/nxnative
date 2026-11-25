@@ -36,9 +36,9 @@ jobs:
           for path in glob.glob("**/nvn_mtl.m", recursive=True):
               with open(path, "r") as f:
                   code = f.read()
-              # ปิดคำสั่ง sc.* ทั้งหมด (รวมถึงคำสั่งที่ขึ้นบรรทัดใหม่) และ [sc ...]
               code = re.sub(r"\bsc\.[a-zA-Z0-9_]+\s*=[^;]+;", "/* patched sc */", code)
               code = re.sub(r"\[sc\s+[^\]]+\];", "/* patched [sc] */", code)
+              code = code.replace("sc.reactiveMaskTextureUsage", "0")
               code = re.sub(r"(id<MTL4FXTemporalScaler>\s*sc\s*=[^;]+;)", r"\1 (void)sc;", code)
               with open(path, "w") as f:
                   f.write(code)
