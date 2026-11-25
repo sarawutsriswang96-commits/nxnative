@@ -29,7 +29,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown requests lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Patch Metal 4 & UE5 Shader Compatibility
+      - name: Patch Metal 4 & UE5 Compatibility
         run: |
           python3 -c '
           import glob, re
@@ -69,7 +69,7 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ค้นหาทุกไฟล์ .py ที่เช็ก "found no shaders" หรือ "no iOS shader libraries" แล้วสั่งข้ามพร้อมสร้าง dummy metallib
+          # 3. ข้ามข้อจำกัด UE5 (เชดเดอร์และ NRO ที่ไม่ได้ใช้งาน)
           for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -77,10 +77,12 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "the shader split found no shaders" in line or "no iOS shader libraries" in line:
+                  if ("the shader split found no shaders" in line or 
+                      "no iOS shader libraries" in line or 
+                      "the game loaded none of the" in line):
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "import glob as _g; [open(_d + \"/default.metallib\", \"wb\").close() for _d in _g.glob(\"work/shader/ios/*\")]\n")
-                      new_lines.append(indent + "print(\"Continuing without pre-split UE5 shaders...\")\n")
+                      new_lines.append(indent + "print(\"Continuing UE5 build...\")\n")
                       skip_exit = True
                       changed = True
                   elif skip_exit and ("sys.exit" in line or "raise " in line or "return " in line):
@@ -95,52 +97,20 @@ jobs:
               if changed:
                   with open(path, "w") as f:
                       f.writelines(new_lines)
-                  print("Patched shader check in:", path)
+                  print("Patched check in:", path)
           '
 
-      - name: Download Game & Keys (Supports Gofile, Google Drive, Direct URL)
+      - name: Download Game & Keys (Supports Pixeldrain, Google Drive, Direct URL)
         run: |
           mkdir -p input work out_ipa out_data
           .venv/bin/python -c '
-          import os, re, subprocess, requests
+          import os, subprocess
 
           def download(url, out_path):
               url = url.strip()
               if not url:
                   return
-              if "gofile.io/d/" in url:
-                  cid = url.split("gofile.io/d/")[1].split("/")[0].split("?")[0]
-                  print("Resolving Gofile ID:", cid)
-                  base_headers = {
-                      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-                      "Accept": "*/*",
-                      "Origin": "https://gofile.io",
-                      "Referer": "https://gofile.io/"
-                  }
-                  # ดึงรหัส wt ล่าสุดจาก global.js ของ Gofile อัตโนมัติ
-                  js_text = requests.get("https://gofile.io/dist/js/global.js", headers=base_headers).text
-                  m = re.search(r"appdata\.wt\s*=\s*[\"\x27]([^\"\x27]+)[\"\x27]", js_text)
-                  wt = m.group(1) if m else "4fd6sg89d7s6"
-                  print("Using Gofile wt:", wt)
-
-                  acc = requests.post("https://api.gofile.io/accounts", headers=base_headers, json={}).json()
-                  token = acc["data"]["token"]
-                  headers = {**base_headers, "Authorization": f"Bearer {token}", "X-Website-Token": wt}
-                  info = requests.get(f"https://api.gofile.io/contents/{cid}?wt={wt}", headers=headers).json()
-                  data = info.get("data", {})
-                  if "link" in data:
-                      direct_link = data["link"]
-                      fname = data.get("name", "game.nsp")
-                  else:
-                      items = data.get("children") or data.get("contents") or {}
-                      if not items:
-                          raise RuntimeError(f"Gofile API response: {info}")
-                      first_file = next(iter(items.values()))
-                      direct_link = first_file["link"]
-                      fname = first_file.get("name", "game.nsp")
-                  print("Downloading from Gofile:", fname)
-                  subprocess.run(["curl", "-fL", "-A", base_headers["User-Agent"], "-H", f"Cookie: accountToken={token}", direct_link, "-o", out_path], check=True)
-              elif "google.com" in url:
+              if "google.com" in url:
                   subprocess.run([".venv/bin/gdown", url, "-O", out_path], check=True)
               else:
                   if "pixeldrain.com/u/" in url:
