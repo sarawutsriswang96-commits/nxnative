@@ -36,11 +36,13 @@ jobs:
           for path in glob.glob("**/nvn_mtl.m", recursive=True):
               with open(path, "r") as f:
                   code = f.read()
-              # ปิดบรรทัดที่เรียกใช้ property *OffsetX / *OffsetY ของ MTL4FXTemporalScaler ทั้งหมด
-              code = re.sub(r"^.*\bsc\.[a-zA-Z0-9_]*Offset[XY]\s*=.*$", r"// patched: \g<0>", code, flags=re.M)
+              # ปิดคำสั่ง sc.* ทั้งหมด (รวมถึงคำสั่งที่ขึ้นบรรทัดใหม่) และ [sc ...]
+              code = re.sub(r"\bsc\.[a-zA-Z0-9_]+\s*=[^;]+;", "/* patched sc */", code)
+              code = re.sub(r"\[sc\s+[^\]]+\];", "/* patched [sc] */", code)
+              code = re.sub(r"(id<MTL4FXTemporalScaler>\s*sc\s*=[^;]+;)", r"\1 (void)sc;", code)
               with open(path, "w") as f:
                   f.write(code)
-              print("Patched:", path)
+              print("Patched successfully:", path)
           '
 
       - name: Download Game & Keys from Google Drive
@@ -79,7 +81,7 @@ jobs:
             --romfs separate \
             --env-file work/env.txt \
             --allow-other-metal \
-            --progress lines
+            --progress lines || (grep -B 2 -A 5 "error:" work/logs/mac_host_build.log && exit 1)
 
       - name: Collect IPA and Separate Game Data
         if: always()
