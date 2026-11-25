@@ -102,7 +102,7 @@ jobs:
         run: |
           mkdir -p input work out_ipa out_data
           .venv/bin/python -c '
-          import os, subprocess, requests
+          import os, re, subprocess, requests
 
           def download(url, out_path):
               url = url.strip()
@@ -117,16 +117,24 @@ jobs:
                       "Origin": "https://gofile.io",
                       "Referer": "https://gofile.io/"
                   }
+                  # ดึงรหัส wt ล่าสุดจาก global.js ของ Gofile อัตโนมัติ
+                  js_text = requests.get("https://gofile.io/dist/js/global.js", headers=base_headers).text
+                  m = re.search(r"appdata\.wt\s*=\s*[\"\x27]([^\"\x27]+)[\"\x27]", js_text)
+                  wt = m.group(1) if m else "4fd6sg89d7s6"
+                  print("Using Gofile wt:", wt)
+
                   acc = requests.post("https://api.gofile.io/accounts", headers=base_headers, json={}).json()
                   token = acc["data"]["token"]
-                  headers = {**base_headers, "Authorization": f"Bearer {token}", "X-Website-Token": "4fd6sg89d7s6"}
-                  info = requests.get(f"https://api.gofile.io/contents/{cid}?wt=4fd6sg89d7s6", headers=headers).json()
+                  headers = {**base_headers, "Authorization": f"Bearer {token}", "X-Website-Token": wt}
+                  info = requests.get(f"https://api.gofile.io/contents/{cid}?wt={wt}", headers=headers).json()
                   data = info.get("data", {})
                   if "link" in data:
                       direct_link = data["link"]
                       fname = data.get("name", "game.nsp")
                   else:
                       items = data.get("children") or data.get("contents") or {}
+                      if not items:
+                          raise RuntimeError(f"Gofile API response: {info}")
                       first_file = next(iter(items.values()))
                       direct_link = first_file["link"]
                       fname = first_file.get("name", "game.nsp")
