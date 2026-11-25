@@ -77,7 +77,7 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "sha = got.stem" in line:
+                  if "got[0].stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
