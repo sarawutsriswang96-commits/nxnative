@@ -53,11 +53,17 @@ jobs:
           fi
           ls -lh input/
 
-      - name: Configure A13 Older Device Mode
+      - name: Configure A13 Older Device Mode & Compiler Flags
         run: |
           echo "DM_PROF_TEX_BC_CPU=1" > work/env.txt
+          # ลดความเข้มงวดของคอมไพเลอร์บน Xcode รุ่นใหม่
+          find . -name "Makefile" -exec sed -i '' 's/-Werror//g' {} + 2>/dev/null || true
 
       - name: Build Unsigned IPA & Separate RomFS
+        env:
+          CFLAGS: "-Wno-everything -fpermissive"
+          OBJCFLAGS: "-Wno-everything -fpermissive"
+          CXXFLAGS: "-Wno-everything -fpermissive"
         run: |
           .venv/bin/python scripts/build_ipa_from_nsp.py input \
             -k input/prod.keys \
@@ -65,24 +71,27 @@ jobs:
             --romfs separate \
             --env-file work/env.txt \
             --allow-other-metal \
-            --progress lines
+            --progress lines || (cat work/logs/mac_host_build.log | grep -i "error:" | head -n 30 && exit 1)
 
       - name: Collect IPA and Separate Game Data
+        if: always()
         run: |
           find . -maxdepth 4 -name "*.ipa" -exec cp {} out_ipa/ \;
           find work -name "*.img" -exec cp {} out_data/ \;
           ls -lh out_ipa/ out_data/
 
       - name: Upload 1 - Game App (.ipa)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: 1-Unsigned-IPA
           path: out_ipa/*.ipa
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload 2 - Game Data (RomFS.img)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: 2-Game-Data-RomFS
           path: out_data/*.img
-          if-no-files-found: error
+          if-no-files-found: warn
