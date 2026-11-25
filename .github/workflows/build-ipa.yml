@@ -77,11 +77,11 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "got[0].stem" in line:
+                  if "got.stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
-                      new_lines.append(indent + "    return []\n")
+                      new_lines.append(indent + "    return g\n")
                       new_lines.append(line)
                       changed = True
                   elif "no iOS shader libraries" in line:
