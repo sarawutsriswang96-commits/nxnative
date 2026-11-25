@@ -1,4 +1,4 @@
-name: Build Separate IPA & Game Data (A13 + Metal4 & UE5 Fix)
+name: Build Separate IPA & Game Data (A13 + Metal4 & UE5 Bypass)
 
 on:
   workflow_dispatch:
@@ -45,15 +45,11 @@ jobs:
                   f.write(code)
               print("Patched Metal 4:", path)
 
-          # 2. แพตช์ให้ shader_split.py ไม่หยุดทำงานเมื่อเจอ UE5 shader layout ที่ไม่รู้จัก
+          # 2. ข้าม shader_split.py สำหรับ UE5 โดยคืนค่า exit(0) ทันที
           for path in glob.glob("**/shader_split.py", recursive=True):
-              with open(path, "r") as f:
-                  scode = f.read()
-              scode = re.sub(r"^(\s*)(raise\s+.*recognized Unreal shader record layout.*)$", r"\1print(\"Skipping unsupported shader layout\"); return", scode, flags=re.M)
-              scode = re.sub(r"^(\s*)(sys\.exit\(1\))$", r"\1print(\"Skipping shader split exit\"); return", scode, flags=re.M)
               with open(path, "w") as f:
-                  f.write(scode)
-              print("Patched shader_split:", path)
+                  f.write("import sys\nprint(\"Skipping UE5 shader_split\")\nsys.exit(0)\n")
+              print("Bypassed shader_split:", path)
           '
 
       - name: Download Game & Keys from Google Drive
