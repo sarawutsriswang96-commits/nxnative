@@ -69,14 +69,14 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. แก้ build_ipa_from_nsp.py ไม่ให้หยุดทำงานเมื่อ found no shaders
+          # 3 & 4. แก้ build_ipa_from_nsp.py ไม่ให้หยุดทำงานเมื่อ found no shaders และ no iOS shader libraries
           for path in glob.glob("**/build_ipa_from_nsp.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "the shader split found no shaders" in line:
+                  if "the shader split found no shaders" in line or "no iOS shader libraries in" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "print(\"Continuing without pre-split UE5 shaders...\")\n")
                       skip_exit = True
