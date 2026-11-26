@@ -69,7 +69,7 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ข้ามข้อจำกัด UE5 (เชดเดอร์, iOS shader libraries และ NRO ที่ไม่ได้ใช้งาน)
+          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO (แก้ตรงจุด got[0].stem)
           for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -77,7 +77,7 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "got.stem" in line:
+                  if "got[0].stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
@@ -93,7 +93,7 @@ jobs:
                   elif ("the shader split found no shaders" in line or 
                       "the game loaded none of the" in line):
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(indent + "print(\"Continuing UE5 build...\")\n")
+                      new_lines.append(indent + "print(\"Continuing build...\")\n")
                       skip_exit = True
                       changed = True
                   elif skip_exit and ("sys.exit" in line or "raise " in line or "return " in line):
