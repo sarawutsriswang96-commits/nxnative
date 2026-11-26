@@ -122,14 +122,12 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. บังคับเปิดโหมด A13 CPU Texture Decompression และปิดบล็อกเช็ก GPU A17 Pro ทุกจุดในโค้ด iOS
+          # 5. ปลดล็อกเช็ก GPU A17 Pro ให้ชิป A13 ผ่านได้ทุกไฟล์ในโค้ด iOS
           for ext in ("*.m", "*.mm", "*.c", "*.cpp"):
               for path in glob.glob("**/" + ext, recursive=True):
                   with open(path, "r", errors="ignore") as f:
                       mcode = f.read()
                   orig = mcode
-                  if "int main(" in mcode:
-                      mcode = re.sub(r"(int\s+main\s*\([^)]*\)\s*\{)", r"\1\n    setenv(\"DM_PROF_TEX_BC_CPU\", \"1\", 1);", mcode)
                   if "This device is not supported" in mcode or "MTLGPUFamilyApple" in mcode:
                       mcode = re.sub(r"MTLGPUFamilyApple[6-9]", "MTLGPUFamilyApple5", mcode)
                       mcode = re.sub(r"if\s*\([^;\n]*supportsFamily\s*:\s*MTLGPUFamilyApple5[^;\n]*\)", "if (0)", mcode)
