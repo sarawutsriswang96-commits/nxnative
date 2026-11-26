@@ -124,37 +124,30 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. Remove "This device is not supported" block completely
-          for path in glob.glob("**/*", recursive=True):
-              if path == "patch_all.py" or not path.endswith((".swift", ".m", ".mm", ".h", ".c", ".cpp", ".py")):
-                  continue
-              try:
-                  with open(path, "r", errors="ignore") as f:
-                      lines = f.readlines()
-              except Exception:
-                  continue
-              full = "".join(lines)
-              if "This device is not supported" in full:
-                  print("=== FOUND UNSUPPORTED SCREEN IN:", path, "===")
-                  for idx, l in enumerate(lines):
-                      if "This device is not supported" in l:
-                          for back in range(idx - 1, max(-1, idx - 12), -1):
-                              stripped = lines[back].lstrip()
-                              indent = lines[back][:len(lines[back]) - len(stripped)]
-                              if stripped.startswith("if ") or stripped.startswith("if("):
-                                  if path.endswith(".swift"):
-                                      lines[back] = indent + "if false {\n"
-                                  elif path.endswith((".m", ".mm", ".c", ".cpp", ".h")):
-                                      lines[back] = indent + "if (0) {\n"
-                                  print("Disabled check at line", back + 1)
-                                  break
-                              elif stripped.startswith("guard "):
-                                  if path.endswith(".swift"):
-                                      lines[back] = indent + "if false {\n"
-                                      print("Disabled guard at line", back + 1)
-                                  break
-                  with open(path, "w") as f:
-                      f.writelines(lines)
+          # 5. Safe A13 unlock in front_ios.m without breaking C braces
+          for path in glob.glob("**/front_ios.m", recursive=True):
+              with open(path, "r") as f:
+                  fcode = f.read()
+              # แทนที่การเช็ก BC texture compression ใน front_ios.m ให้เป็น true/YES โดยไม่ยุ่งกับปีกกา { }
+              fcode = re.sub(r"\[[a-zA-Z0-9_.]+\s+supportsBCTextureCompression\]", "YES", fcode)
+              fcode = re.sub(r"![a-zA-Z0-9_.]+\.supportsBCTextureCompression", "NO", fcode)
+              fcode = re.sub(r"[a-zA-Z0-9_.]+\.supportsBCTextureCompression", "YES", fcode)
+              # บังคับเปิด DM_PROF_TEX_BC_CPU ใน front_ios.m
+              fcode = fcode.replace('getenv("DM_PROF_TEX_BC_CPU")', '"1"')
+              # หากยังมีเงื่อนไขเช็ก before This device is not supported ให้เปลี่ยนเงื่อนไขในวงเล็บเป็น (0) โดยคงปีกกา { ไว้ครบ
+              lines = fcode.splitlines(True)
+              for idx, l in enumerate(lines):
+                  if "This device is not supported" in l:
+                      for back in range(idx - 1, max(-1, idx - 8), -1):
+                          if "if" in lines[back] and "(" in lines[back] and ")" in lines[back]:
+                              indent = lines[back][:len(lines[back]) - len(lines[back].lstrip())]
+                              has_brace = "{" in lines[back]
+                              lines[back] = indent + ("if (0) {\n" if has_brace else "if (0)\n")
+                              print("Safely bypassed unsupported check in front_ios.m at line", back + 1)
+                              break
+              with open(path, "w") as f:
+                  f.writelines(lines)
+              print("Patched front_ios.m:", path)
           EOF
           python3 patch_all.py
 
@@ -175,10 +168,14 @@ jobs:
                       url = url.replace("pixeldrain.com/u/", "pixeldrain.com/api/file/")
                   subprocess.run(["curl", "-fL", url, "-o", out_path], check=True)
 
-          download(sys.argv[1], "input/game.nsp")
-          download(sys.argv[2], "input/prod.keys")
-          if len(sys.argv) > 3 and sys.argv[3]:
-              download(sys.argv[3], "input/dlc.nsp")
+          args = list(sys.argv)
+          args.pop(0)
+          if args:
+              download(args.pop(0), "input/game.nsp")
+          if args:
+              download(args.pop(0), "input/prod.keys")
+          if args:
+              download(args.pop(0), "input/dlc.nsp")
           EOF
           .venv/bin/python dl.py "${{ inputs.game_url }}" "${{ inputs.keys_url }}" "${{ inputs.dlc_url }}"
           ls -lh input/
