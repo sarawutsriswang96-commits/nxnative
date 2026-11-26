@@ -122,24 +122,32 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. ปลดล็อกเช็ก BC-compressed textures ในไฟล์ .swift, .m, .mm, .c, .cpp ทั้งหมด
-          for ext in ("*.swift", "*.m", "*.mm", "*.c", "*.cpp"):
-              for path in glob.glob("**/" + ext, recursive=True):
+          # 5. สแกนและทำลายเงื่อนไขเช็ก "This device is not supported" ในทุกไฟล์ทุกนามสกุลทั้งโปรเจกต์
+          for path in glob.glob("**/*", recursive=True):
+              if not path.endswith((".swift", ".m", ".mm", ".h", ".c", ".cpp", ".py")):
+                  continue
+              try:
                   with open(path, "r", errors="ignore") as f:
                       mcode = f.read()
-                  orig = mcode
-                  if ext == "*.swift":
+              except Exception:
+                  continue
+              orig = mcode
+              if "supportsBCTextureCompression" in mcode or "This device is not supported" in mcode or "DM_PROF_TEX_BC_CPU" in mcode:
+                  print("Found GPU/BC check in:", path)
+                  if path.endswith(".swift"):
                       mcode = re.sub(r"[a-zA-Z0-9_?.!]+\.supportsBCTextureCompression", "true", mcode)
                       mcode = mcode.replace("supportsBCTextureCompression", "supportsFamily(.apple5)")
-                  else:
+                  elif path.endswith((".m", ".mm", ".h", ".c", ".cpp")):
                       mcode = re.sub(r"\[\s*[a-zA-Z0-9_.]+\s+supportsBCTextureCompression\s*\]", "YES", mcode)
                       mcode = re.sub(r"MTLGPUFamilyApple[6-9]", "MTLGPUFamilyApple5", mcode)
-                  if "DM_PROF_TEX_BC_CPU" in mcode:
                       mcode = re.sub(r"getenv\s*\(\s*\"DM_PROF_TEX_BC_CPU\"\s*\)", "\"1\"", mcode)
-                  if mcode != orig:
-                      with open(path, "w") as f:
-                          f.write(mcode)
-                      print("Unlocked A13 BC Texture in:", path)
+                  elif path.endswith(".py"):
+                      mcode = re.sub(r"([a-zA-Z0-9_?.!]+)\.supportsBCTextureCompression", "true", mcode)
+                      mcode = re.sub(r"\[\s*([a-zA-Z0-9_.]+)\s+supportsBCTextureCompression\s*\]", "YES", mcode)
+              if mcode != orig:
+                  with open(path, "w") as f:
+                      f.write(mcode)
+                  print("Unlocked A13 BC Texture in:", path)
           '
 
       - name: Download Game & Keys (Supports Google Drive, Pixeldrain, Direct URL)
@@ -194,7 +202,7 @@ jobs:
           TAG="build-${{ github.run_number }}"
           FILES=$(ls out_ipa/*.ipa out_data/*.img 2>/dev/null || true)
           if [ -n "$FILES" ]; then
-            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 Swift Unlocked)"
+            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 Fully Unlocked)"
             echo "=========================================="
             echo "ดาวน์โหลดเต็มสปีดได้ที่ลิงก์นี้:"
             echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"
