@@ -1,18 +1,18 @@
-name: Build Separate IPA & Game Data (Final Complete Build)
+name: Build Separate IPA & Game Data
 
 on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Google Drive, Pixeldrain)'
+        description: 'Game NSP link (Google Drive or Pixeldrain)'
         required: true
         type: string
       keys_url:
-        description: 'ลิงก์ของไฟล์ prod.keys'
+        description: 'prod.keys link'
         required: true
         type: string
       dlc_url:
-        description: 'ลิงก์ของไฟล์ DLC (ถ้าไม่มีให้เว้นว่างไว้)'
+        description: 'DLC link (optional)'
         required: false
         type: string
 
@@ -26,18 +26,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python & Homebrew Dependencies
+      - name: Set up Python and Homebrew Dependencies
         run: |
           brew install xcodegen glslang
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown requests lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Patch Metal 4, UE5, A13 GPU & iOS SDK Compatibility
+      - name: Patch Metal 4, UE5, A13 GPU and iOS SDK Compatibility
         run: |
-          python3 -c '
+          cat << 'EOF' > patch_all.py
           import glob, re
 
-          # 1. แพตช์ Metal 4 ใน nvn_mtl.m
+          # 1. Metal 4 patch
           for path in glob.glob("**/nvn_mtl.m", recursive=True):
               with open(path, "r") as f:
                   code = f.read()
@@ -49,7 +49,7 @@ jobs:
                   f.write(code)
               print("Patched Metal 4:", path)
 
-          # 2. แก้ shader_split.py ให้ข้ามเฉพาะ record ที่ไม่รู้จัก (continue)
+          # 2. UE5 shader_split patch
           for path in glob.glob("**/shader_split.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -58,7 +58,7 @@ jobs:
               for line in lines:
                   if "recognized Unreal shader record layout" in line:
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(indent + "print(\"Warning: skipping unknown shader record\")\n")
+                      new_lines.append(indent + 'print("Warning: skipping unknown shader record")\n')
                       new_lines.append(indent + "continue\n")
                       skip_next_exit = True
                   elif skip_next_exit and ("sys.exit" in line or "raise " in line):
@@ -72,8 +72,10 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO
+          # 3. Shader & NRO bypass
           for path in glob.glob("**/*.py", recursive=True):
+              if path == "patch_all.py":
+                  continue
               with open(path, "r") as f:
                   lines = f.readlines()
               changed = False
@@ -83,20 +85,20 @@ jobs:
                   if "got" in line and ".stem" in line and "manifest" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
-                      new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
+                      new_lines.append(indent + '    (nro_dir / "nro.tsv").write_text("")\n')
                       new_lines.append(indent + "    return g\n")
                       new_lines.append(line)
                       changed = True
                   elif "no iOS shader libraries" in line:
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(indent + "import glob as _g, os as _o; [_o.makedirs(_d, exist_ok=True) or open(_d + \"/default.metallib\", \"wb\").close() for _d in _g.glob(\"work/shader/ios/*\")]\n")
-                      new_lines.append(indent + "print(\"Bypassing empty iOS shader libraries...\")\n")
+                      new_lines.append(indent + 'import glob as _g, os as _o; [_o.makedirs(_d, exist_ok=True) or open(_d + "/default.metallib", "wb").close() for _d in _g.glob("work/shader/ios/*")]\n')
+                      new_lines.append(indent + 'print("Bypassing empty iOS shader libraries...")\n')
                       new_lines.append(indent + "return\n")
                       changed = True
                   elif ("the shader split found no shaders" in line or 
                       "the game loaded none of the" in line):
                       indent = line[:len(line) - len(line.lstrip())]
-                      new_lines.append(indent + "print(\"Continuing build...\")\n")
+                      new_lines.append(indent + 'print("Continuing build...")\n')
                       skip_exit = True
                       changed = True
                   elif skip_exit and ("sys.exit" in line or "raise " in line or "return " in line):
@@ -113,7 +115,7 @@ jobs:
                       f.writelines(new_lines)
                   print("Patched check in:", path)
 
-          # 4. แก้บั๊ก deviceMotionBody ใน DmGamepad.m สำหรับ xcodebuild
+          # 4. DmGamepad.m patch
           for path in glob.glob("**/DmGamepad.m", recursive=True):
               with open(path, "r") as f:
                   gcode = f.read()
@@ -122,9 +124,9 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. ค้นหาคำว่า "This device is not supported" โดยตรงในทุกไฟล์ แล้วปิดบล็อก if ข้างหน้าทันที
+          # 5. Remove "This device is not supported" block completely
           for path in glob.glob("**/*", recursive=True):
-              if not path.endswith((".swift", ".m", ".mm", ".h", ".c", ".cpp", ".py")):
+              if path == "patch_all.py" or not path.endswith((".swift", ".m", ".mm", ".h", ".c", ".cpp", ".py")):
                   continue
               try:
                   with open(path, "r", errors="ignore") as f:
@@ -136,11 +138,7 @@ jobs:
                   print("=== FOUND UNSUPPORTED SCREEN IN:", path, "===")
                   for idx, l in enumerate(lines):
                       if "This device is not supported" in l:
-                          start = max(0, idx - 8)
-                          for k in range(start, min(len(lines), idx + 4)):
-                              print(f"Line {k+1}: {lines[k].rstrip()}")
-                          # ย้อนขึ้นไปแก้คำสั่ง if ที่ครอบบล็อกนี้ให้เป็น false/0
-                          for back in range(idx - 1, max(-1, idx - 10), -1):
+                          for back in range(idx - 1, max(-1, idx - 12), -1):
                               stripped = lines[back].lstrip()
                               indent = lines[back][:len(lines[back]) - len(stripped)]
                               if stripped.startswith("if ") or stripped.startswith("if("):
@@ -148,22 +146,23 @@ jobs:
                                       lines[back] = indent + "if false {\n"
                                   elif path.endswith((".m", ".mm", ".c", ".cpp", ".h")):
                                       lines[back] = indent + "if (0) {\n"
-                                  print(f"Disabled check at line {back+1}: {lines[back].strip()}")
+                                  print("Disabled check at line", back + 1)
                                   break
                               elif stripped.startswith("guard "):
                                   if path.endswith(".swift"):
                                       lines[back] = indent + "if false {\n"
-                                      print(f"Disabled guard at line {back+1}")
+                                      print("Disabled guard at line", back + 1)
                                   break
                   with open(path, "w") as f:
                       f.writelines(lines)
-          '
+          EOF
+          python3 patch_all.py
 
-      - name: Download Game & Keys (Supports Google Drive, Pixeldrain, Direct URL)
+      - name: Download Game and Keys
         run: |
           mkdir -p input work out_ipa out_data
-          .venv/bin/python -c '
-          import os, subprocess
+          cat << 'EOF' > dl.py
+          import subprocess, sys
 
           def download(url, out_path):
               url = url.strip()
@@ -176,17 +175,19 @@ jobs:
                       url = url.replace("pixeldrain.com/u/", "pixeldrain.com/api/file/")
                   subprocess.run(["curl", "-fL", url, "-o", out_path], check=True)
 
-          download("${{ inputs.game_url }}", "input/game.nsp")
-          download("${{ inputs.keys_url }}", "input/prod.keys")
-          download("${{ inputs.dlc_url }}", "input/dlc.nsp")
-          '
+          download(sys.argv[1], "input/game.nsp")
+          download(sys.argv[2], "input/prod.keys")
+          if len(sys.argv) > 3 and sys.argv[3]:
+              download(sys.argv[3], "input/dlc.nsp")
+          EOF
+          .venv/bin/python dl.py "${{ inputs.game_url }}" "${{ inputs.keys_url }}" "${{ inputs.dlc_url }}"
           ls -lh input/
 
       - name: Configure A13 Older Device Mode
         run: |
           echo "DM_PROF_TEX_BC_CPU=1" > work/env.txt
 
-      - name: Build Unsigned IPA & Separate RomFS
+      - name: Build Unsigned IPA and Separate RomFS
         run: |
           .venv/bin/python scripts/build_ipa_from_nsp.py input \
             -k input/prod.keys \
@@ -203,7 +204,7 @@ jobs:
           find work -name "*.img" -exec cp {} out_data/ \;
           ls -lh out_ipa/ out_data/
 
-      - name: Publish Fast Direct Download Links (GitHub Releases)
+      - name: Publish Fast Direct Download Links
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -212,8 +213,5 @@ jobs:
           FILES=$(ls out_ipa/*.ipa out_data/*.img 2>/dev/null || true)
           if [ -n "$FILES" ]; then
             gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 Fully Unlocked)"
-            echo "=========================================="
-            echo "ดาวน์โหลดเต็มสปีดได้ที่ลิงก์นี้:"
             echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"
-echo "=========================================="
-fi
+          fi
