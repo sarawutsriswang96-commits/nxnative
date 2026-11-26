@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Buzzheavier, Google Drive, Pixeldrain)'
+        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Google Drive, Buzzheavier, Pixeldrain)'
         required: true
         type: string
       keys_url:
@@ -29,7 +29,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown requests lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Patch Metal 4 & UE5 Compatibility
+      - name: Patch Metal 4, UE5 & iOS SDK Compatibility
         run: |
           python3 -c '
           import glob, re
@@ -77,7 +77,7 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "got[0].stem" in line:
+                  if "got.stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
@@ -109,37 +109,28 @@ jobs:
                   with open(path, "w") as f:
                       f.writelines(new_lines)
                   print("Patched check in:", path)
+
+          # 4. แก้บั๊ก deviceMotionBody ใน DmGamepad.m สำหรับ xcodebuild
+          for path in glob.glob("**/DmGamepad.m", recursive=True):
+              with open(path, "r") as f:
+                  gcode = f.read()
+              gcode = re.sub(r"^.*deviceMotionBody.*$", r"// patched: \g<0>", gcode, flags=re.M)
+              with open(path, "w") as f:
+                  f.write(gcode)
+              print("Patched DmGamepad.m:", path)
           '
 
-      - name: Download Game & Keys (Supports Buzzheavier, Pixeldrain, Google Drive)
+      - name: Download Game & Keys (Supports Google Drive, Buzzheavier, Pixeldrain)
         run: |
           mkdir -p input work out_ipa out_data
           .venv/bin/python -c '
-          import os, subprocess, requests
+          import os, subprocess
 
           def download(url, out_path):
               url = url.strip()
               if not url:
                   return
-              if "buzzheavier.com/" in url:
-                  base_url = url.split("?")[0].rstrip("/")
-                  dl_endpoint = base_url + "/download"
-                  headers = {
-                      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                      "hx-current-url": base_url,
-                      "hx-request": "true",
-                      "Referer": base_url
-                  }
-                  r = requests.get(dl_endpoint, headers=headers, allow_redirects=False)
-                  print("Buzzheavier status:", r.status_code, "headers:", dict(r.headers))
-                  direct = r.headers.get("hx-redirect") or r.headers.get("Location") or ""
-                  if direct and not direct.startswith("http"):
-                      direct = "https://buzzheavier.com" + direct
-                  if not direct or direct == base_url:
-                      direct = dl_endpoint
-                  print("Downloading from:", direct)
-                  subprocess.run(["curl", "-fL", "--http1.1", "-A", headers["User-Agent"], "-H", "hx-request: true", "-e", base_url, direct, "-o", out_path], check=True)
-              elif "google.com" in url:
+              if "google.com" in url:
                   subprocess.run([".venv/bin/gdown", url, "-O", out_path], check=True)
               else:
                   if "pixeldrain.com/u/" in url:
