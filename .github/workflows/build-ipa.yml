@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       game_url:
-        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Google Drive, Gofile, Pixeldrain)'
+        description: 'ลิงก์ไฟล์เกม .nsp (รองรับ Buzzheavier, Google Drive, Pixeldrain)'
         required: true
         type: string
       keys_url:
@@ -77,7 +77,7 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "got.stem" in line:
+                  if "got[0].stem" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
@@ -111,17 +111,35 @@ jobs:
                   print("Patched check in:", path)
           '
 
-      - name: Download Game & Keys (Supports Pixeldrain, Google Drive, Direct URL)
+      - name: Download Game & Keys (Supports Buzzheavier, Pixeldrain, Google Drive)
         run: |
           mkdir -p input work out_ipa out_data
           .venv/bin/python -c '
-          import os, subprocess
+          import os, subprocess, requests
 
           def download(url, out_path):
               url = url.strip()
               if not url:
                   return
-              if "google.com" in url:
+              if "buzzheavier.com/" in url:
+                  base_url = url.split("?")[0].rstrip("/")
+                  dl_endpoint = base_url + "/download"
+                  headers = {
+                      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                      "hx-current-url": base_url,
+                      "hx-request": "true",
+                      "Referer": base_url
+                  }
+                  r = requests.get(dl_endpoint, headers=headers, allow_redirects=False)
+                  direct = r.headers.get("hx-redirect") or r.headers.get("Location")
+                  if direct:
+                      if direct.startswith("/"):
+                          direct = "https://buzzheavier.com" + direct
+                      print("Downloading from Buzzheavier direct link...")
+                      subprocess.run(["curl", "-fL", "-A", headers["User-Agent"], "-e", base_url, direct, "-o", out_path], check=True)
+                  else:
+                      subprocess.run(["curl", "-fL", "-A", headers["User-Agent"], "-e", base_url, dl_endpoint, "-o", out_path], check=True)
+              elif "google.com" in url:
                   subprocess.run([".venv/bin/gdown", url, "-O", out_path], check=True)
               else:
                   if "pixeldrain.com/u/" in url:
