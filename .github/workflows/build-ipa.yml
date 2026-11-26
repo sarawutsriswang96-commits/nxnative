@@ -32,7 +32,7 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install gdown requests lz4 "capstone>=5,<6" fonttools zbic nsz "backports.zstd; python_version < '3.14'"
 
-      - name: Patch Metal 4, UE5 & iOS SDK Compatibility
+      - name: Patch Metal 4, UE5, A13 GPU & iOS SDK Compatibility
         run: |
           python3 -c '
           import glob, re
@@ -72,7 +72,7 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO (เช็กคำว่า got และ .stem)
+          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO
           for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -121,6 +121,22 @@ jobs:
               with open(path, "w") as f:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
+
+          # 5. บังคับเปิดโหมด A13 CPU Texture Decompression และปิดบล็อกเช็ก GPU A17 Pro ทุกจุดในโค้ด iOS
+          for ext in ("*.m", "*.mm", "*.c", "*.cpp"):
+              for path in glob.glob("**/" + ext, recursive=True):
+                  with open(path, "r", errors="ignore") as f:
+                      mcode = f.read()
+                  orig = mcode
+                  if "int main(" in mcode:
+                      mcode = re.sub(r"(int\s+main\s*\([^)]*\)\s*\{)", r"\1\n    setenv(\"DM_PROF_TEX_BC_CPU\", \"1\", 1);", mcode)
+                  if "This device is not supported" in mcode or "MTLGPUFamilyApple" in mcode:
+                      mcode = re.sub(r"MTLGPUFamilyApple[6-9]", "MTLGPUFamilyApple5", mcode)
+                      mcode = re.sub(r"if\s*\([^;\n]*supportsFamily\s*:\s*MTLGPUFamilyApple5[^;\n]*\)", "if (0)", mcode)
+                  if mcode != orig:
+                      with open(path, "w") as f:
+                          f.write(mcode)
+                      print("Unlocked A13 GPU in:", path)
           '
 
       - name: Download Game & Keys (Supports Google Drive, Pixeldrain, Direct URL)
@@ -175,7 +191,7 @@ jobs:
           TAG="build-${{ github.run_number }}"
           FILES=$(ls out_ipa/*.ipa out_data/*.img 2>/dev/null || true)
           if [ -n "$FILES" ]; then
-            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11"
+            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 Unlocked)"
             echo "=========================================="
             echo "ดาวน์โหลดเต็มสปีดได้ที่ลิงก์นี้:"
             echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"
