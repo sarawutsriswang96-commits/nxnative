@@ -124,17 +124,19 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. Safe ObjC bracket replacement for supportsBCTextureCompression in BOTH nvn_mtl.m & front_ios.m
-          for target in ("**/nvn_mtl.m", "**/front_ios.m"):
-              for path in glob.glob(target, recursive=True):
-                  with open(path, "r") as f:
-                      code = f.read()
-                  orig = code
-                  code = re.sub(r"\[([a-zA-Z0-9_.\->]+)\s+supportsBCTextureCompression\]", r"[\1 supportsFamily:MTLGPUFamilyApple5]", code)
-                  if code != orig:
-                      with open(path, "w") as f:
-                          f.write(code)
-                      print("Safely unlocked A13 BC check in:", path)
+          # 5. Direct bypass inside front_ios.m at "This device is not supported."
+          for path in glob.glob("**/front_ios.m", recursive=True):
+              with open(path, "r") as f:
+                  text = f.read()
+              # แทนที่การเรียกเช็ก BC ใน front_ios.m ทุกจุด (ทั้ง dot notation และ bracket notation)
+              text = re.sub(r"\.supportsBCTextureCompression\b", ".supportsFamily:MTLGPUFamilyApple5", text)
+              text = re.sub(r"\bsupportsBCTextureCompression\b", "supportsFamily:MTLGPUFamilyApple5", text)
+              # บังคับเปิด DM_PROF_TEX_BC_CPU=1 ที่หัวไฟล์ front_ios.m ด้วย constructor
+              header_inject = '__attribute__((constructor)) static void force_a13_bc(void) { setenv("DM_PROF_TEX_BC_CPU", "1", 1); }\n'
+              text = header_inject + text
+              with open(path, "w") as f:
+                  f.write(text)
+              print("Forced A13 constructor & Apple5 in:", path)
           EOF
           python3 patch_all.py
 
@@ -196,6 +198,6 @@ jobs:
           TAG="build-${{ github.run_number }}"
           FILES=$(ls out_ipa/*.ipa out_data/*.img 2>/dev/null || true)
           if [ -n "$FILES" ]; then
-            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 nvn_mtl Unlocked)"
+            gh release create "$TAG" $FILES --title "Game Build #$GITHUB_RUN_NUMBER" --notes "Fast direct download for iPhone 11 (A13 Constructor Forced)"
             echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"
           fi
