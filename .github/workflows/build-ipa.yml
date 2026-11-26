@@ -122,32 +122,41 @@ jobs:
                   f.write(gcode)
               print("Patched DmGamepad.m:", path)
 
-          # 5. สแกนและทำลายเงื่อนไขเช็ก "This device is not supported" ในทุกไฟล์ทุกนามสกุลทั้งโปรเจกต์
+          # 5. ค้นหาคำว่า "This device is not supported" โดยตรงในทุกไฟล์ แล้วปิดบล็อก if ข้างหน้าทันที
           for path in glob.glob("**/*", recursive=True):
               if not path.endswith((".swift", ".m", ".mm", ".h", ".c", ".cpp", ".py")):
                   continue
               try:
                   with open(path, "r", errors="ignore") as f:
-                      mcode = f.read()
+                      lines = f.readlines()
               except Exception:
                   continue
-              orig = mcode
-              if "supportsBCTextureCompression" in mcode or "This device is not supported" in mcode or "DM_PROF_TEX_BC_CPU" in mcode:
-                  print("Found GPU/BC check in:", path)
-                  if path.endswith(".swift"):
-                      mcode = re.sub(r"[a-zA-Z0-9_?.!]+\.supportsBCTextureCompression", "true", mcode)
-                      mcode = mcode.replace("supportsBCTextureCompression", "supportsFamily(.apple5)")
-                  elif path.endswith((".m", ".mm", ".h", ".c", ".cpp")):
-                      mcode = re.sub(r"\[\s*[a-zA-Z0-9_.]+\s+supportsBCTextureCompression\s*\]", "YES", mcode)
-                      mcode = re.sub(r"MTLGPUFamilyApple[6-9]", "MTLGPUFamilyApple5", mcode)
-                      mcode = re.sub(r"getenv\s*\(\s*\"DM_PROF_TEX_BC_CPU\"\s*\)", "\"1\"", mcode)
-                  elif path.endswith(".py"):
-                      mcode = re.sub(r"([a-zA-Z0-9_?.!]+)\.supportsBCTextureCompression", "true", mcode)
-                      mcode = re.sub(r"\[\s*([a-zA-Z0-9_.]+)\s+supportsBCTextureCompression\s*\]", "YES", mcode)
-              if mcode != orig:
+              full = "".join(lines)
+              if "This device is not supported" in full:
+                  print("=== FOUND UNSUPPORTED SCREEN IN:", path, "===")
+                  for idx, l in enumerate(lines):
+                      if "This device is not supported" in l:
+                          start = max(0, idx - 8)
+                          for k in range(start, min(len(lines), idx + 4)):
+                              print(f"Line {k+1}: {lines[k].rstrip()}")
+                          # ย้อนขึ้นไปแก้คำสั่ง if ที่ครอบบล็อกนี้ให้เป็น false/0
+                          for back in range(idx - 1, max(-1, idx - 10), -1):
+                              stripped = lines[back].lstrip()
+                              indent = lines[back][:len(lines[back]) - len(stripped)]
+                              if stripped.startswith("if ") or stripped.startswith("if("):
+                                  if path.endswith(".swift"):
+                                      lines[back] = indent + "if false {\n"
+                                  elif path.endswith((".m", ".mm", ".c", ".cpp", ".h")):
+                                      lines[back] = indent + "if (0) {\n"
+                                  print(f"Disabled check at line {back+1}: {lines[back].strip()}")
+                                  break
+                              elif stripped.startswith("guard "):
+                                  if path.endswith(".swift"):
+                                      lines[back] = indent + "if false {\n"
+                                      print(f"Disabled guard at line {back+1}")
+                                  break
                   with open(path, "w") as f:
-                      f.write(mcode)
-                  print("Unlocked A13 BC Texture in:", path)
+                      f.writelines(lines)
           '
 
       - name: Download Game & Keys (Supports Google Drive, Pixeldrain, Direct URL)
@@ -206,5 +215,5 @@ jobs:
             echo "=========================================="
             echo "ดาวน์โหลดเต็มสปีดได้ที่ลิงก์นี้:"
             echo "https://github.com/${{ github.repository }}/releases/tag/$TAG"
-            echo "=========================================="
-          fi
+echo "=========================================="
+fi
