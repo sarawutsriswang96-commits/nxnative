@@ -72,7 +72,7 @@ jobs:
                   f.writelines(new_lines)
               print("Patched UE5 loop in:", path)
 
-          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO (แก้ตรงจุด got.stem)
+          # 3. ข้ามข้อจำกัดเชดเดอร์และ NRO (เช็กคำว่า got และ .stem)
           for path in glob.glob("**/*.py", recursive=True):
               with open(path, "r") as f:
                   lines = f.readlines()
@@ -80,7 +80,7 @@ jobs:
               new_lines = []
               skip_exit = False
               for line in lines:
-                  if "got.stem" in line:
+                  if "got" in line and ".stem" in line and "manifest" in line:
                       indent = line[:len(line) - len(line.lstrip())]
                       new_lines.append(indent + "if not got:\n")
                       new_lines.append(indent + "    (nro_dir / \"nro.tsv\").write_text(\"\")\n")
